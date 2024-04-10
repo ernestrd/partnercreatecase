@@ -8,6 +8,7 @@ AWS.config.update({
   region: 'us-east-1' // 
 });
 
+console.log("Access Key = ", process.env.partneraccesskey)
 
 function CaseCreationForm() {
   const [formData, setFormData] = useState({
