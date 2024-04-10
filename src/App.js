@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import { DescribeSeverityLevelsCommand } from "@aws-sdk/client-support";
+import { DescribeSeverityLevelsCommand , DescribeServicesCommand } from "@aws-sdk/client-support";
 import client from './client.js';
 
 function CaseCreationForm() {
@@ -21,9 +21,19 @@ function CaseCreationForm() {
 
   useEffect(() => {
     async function fetchServices() {
-      // Fetch services code here
+      try {
+        const params = {
+          Language: 'en',
+          ServiceCodeList: ['all']
+        };
+        const command = new DescribeServicesCommand(params);
+        const data = await client.send(command);
+        const serviceNames = data.services.map(service => service.code);
+        setServices(serviceNames);
+      } catch (error) {
+        console.error('Error fetching services:', error);
+      }
     }
-
     async function fetchSeverities() {
       try {
         const command = new DescribeSeverityLevelsCommand({});
