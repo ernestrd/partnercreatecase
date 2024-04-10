@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import AWS from 'aws-sdk';
+
+AWS.config.update({
+  accessKeyId: process.env.partneraccesskey,
+  secretAccessKey: process.env.partnercasesecretkey,
+  region: 'us-east-1' // 
+});
+
 
 function CaseCreationForm() {
   const [formData, setFormData] = useState({
@@ -14,6 +21,27 @@ function CaseCreationForm() {
     attachment: [],
     additionalContacts: ''
   });
+
+  const [services, setServices] = useState([]);
+
+  useEffect(() => {
+    async function fetchServices() {
+      // Initialize AWS SDK
+      AWS.config.update({ region: 'us-east-1' });
+      const pricing = new AWS.Pricing();
+
+      try {
+        const data = await pricing.describeServices().promise();
+        const serviceNames = data.Services.map(service => service.ServiceCode);
+        setServices(serviceNames);
+      } catch (error) {
+        console.error('Error fetching services:', error);
+        // Handle error
+      }
+    }
+
+    fetchServices();
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -98,7 +126,12 @@ function CaseCreationForm() {
           </div>
           <div className="form-group">
             <label htmlFor="service">Service:</label>
-            <input type="text" id="service" name="service" value={formData.service} onChange={handleChange} required />
+            <select id="service" name="service" value={formData.service} onChange={handleChange} required>
+              <option value="">Select</option>
+              {services.map((service, index) => (
+                <option key={index} value={service}>{service}</option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label htmlFor="category">Category:</label>
