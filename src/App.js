@@ -3,12 +3,12 @@ import './App.css';
 import AWS from 'aws-sdk';
 
 AWS.config.update({
-  accessKeyId: process.env.partneraccesskey,
-  secretAccessKey: process.env.partnercasesecretkey,
+  accessKeyId: process.env.REACT_APP_partneraccesskey,
+  secretAccessKey: process.env.REACT_APP_partnercasesecretkey,
   region: 'us-east-1' // 
 });
 
-console.log("Access Key = ", process.env.partneraccesskey)
+console.log("Access Key = ", process.env.REACT_APP_partneraccesskey)
 
 function CaseCreationForm() {
   const [formData, setFormData] = useState({
