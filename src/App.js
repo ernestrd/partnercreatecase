@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import AWS from 'aws-sdk';
-
-AWS.config.update({
-  accessKeyId: process.env.REACT_APP_partneraccesskey,
-  secretAccessKey: process.env.REACT_APP_partnercasesecretkey,
-  region: 'us-east-1' // 
-});
+import { DescribeSeverityLevelsCommand } from "@aws-sdk/client-support";
+import client from './client.js';
 
 function CaseCreationForm() {
   const [formData, setFormData] = useState({
@@ -22,53 +17,44 @@ function CaseCreationForm() {
   });
 
   const [services, setServices] = useState([]);
+  const [severities, setSeverities] = useState([]);
 
   useEffect(() => {
     async function fetchServices() {
-      // Initialize AWS SDK
-      AWS.config.update({ region: 'us-east-1' });
-      const pricing = new AWS.Pricing();
+      // Fetch services code here
+    }
 
+    async function fetchSeverities() {
       try {
-        const data = await pricing.describeServices().promise();
-        const serviceNames = data.Services.map(service => service.ServiceCode);
-        setServices(serviceNames);
+        const command = new DescribeSeverityLevelsCommand({});
+        const data = await client.send(command);
+        const severityCodes = data.severityLevels.map(severity => severity.code);
+        setSeverities(severityCodes);
       } catch (error) {
-        console.error('Error fetching services:', error);
-        // Handle error
+        console.error('Error fetching severities:', error);
       }
     }
 
     fetchServices();
+    fetchSeverities();
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    // handleChange code here
   };
 
   const handleFileChange = (e) => {
-    setFormData({
-      ...formData,
-      attachment: [...e.target.files]
-    });
+    // handleFileChange code here
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Initialize AWS SDK
-    AWS.config.update({ region: 'us-east-1' });
-    const support = new AWS.Support();
-
     const params = {
       subject: formData.subject,
-      serviceCode: formData.service, 
-      severityCode: formData.severity, 
-      categoryCode: formData.category, 
+      serviceCode: formData.service,
+      severityCode: formData.severity,
+      categoryCode: formData.category,
       communicationBody: formData.description,
       attachmentSet: formData.attachment.map(file => ({
         fileName: file.name,
@@ -78,16 +64,9 @@ function CaseCreationForm() {
     };
 
     try {
-      // Call AWS Support API to create case
-      const data = await new Promise((resolve, reject) => {
-        support.createCase(params, (err, data) => {
-          if (err) reject(err);
-          else resolve(data);
-        });
-      });
+      const data = await client.createCase(params).promise();
 
       console.log('Case created:', data);
-      // Optionally reset form fields after successful submission
       setFormData({
         workloadAccount: '',
         issueType: '',
@@ -140,11 +119,9 @@ function CaseCreationForm() {
             <label htmlFor="severity">Severity:</label>
             <select id="severity" name="severity" value={formData.severity} onChange={handleChange} required>
               <option value="">Select</option>
-              <option value="Low">Low</option>
-              <option value="Normal">Normal</option>
-              <option value="High">High</option>
-              <option value="Urgent">Urgent</option>
-              <option value="Critical">Critical</option>
+              {severities.map((severity, index) => (
+                <option key={index} value={severity}>{severity}</option>
+              ))}
             </select>
           </div>
           <div className="form-group">
