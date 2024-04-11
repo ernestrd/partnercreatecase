@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { DescribeSeverityLevelsCommand, DescribeServicesCommand } from "@aws-sdk/client-support";
-import { DescribeOrganizationCommand } from "@aws-sdk/client-organizations";
+import { OrganizationsClient , DescribeOrganizationCommand } from "@aws-sdk/client-organizations";
 import  client  from './client.js';
 import ErrorBanner from './component/ErrorBanner.js';
 import { SupportClient } from "@aws-sdk/client-support";
@@ -52,20 +52,8 @@ function CaseCreationForm() {
         console.error('Error fetching severities:', error);
       }
     }
-
-    async function fetchManagementAccount() {
-      try {
-        const command = new DescribeOrganizationCommand({});
-        const data = await client.send(command);
-        setManagementAccount(data.organization.MasterAccountId);
-      } catch (error) {
-        console.error('Error fetching management account:', error);
-      }
-    }
-
     fetchServices();
     fetchSeverities();
-    fetchManagementAccount();
   }, []);
 
   useEffect(() => {
@@ -104,66 +92,86 @@ function CaseCreationForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Assume a role in the management account only if necessary
-    if (formData.workloadAccount !== managementAccount) {
-      const assumeRoleParams = {
-        RoleArn: 'arn:aws:iam::707187469504:role/CrossAccountSupportRole',
-        RoleSessionName: 'CrossAccountSupportRole'
-      };
-      const stsClient = new STSClient({
+    try {
+      const organizationsClient = new OrganizationsClient({
         region: 'us-east-1',
-        credentials: client.config.credentials, // Use existing credentials
+        credentials: client.config.credentials
       });
-      try {
-        const assumedRole = await stsClient.send(new AssumeRoleCommand(assumeRoleParams));
-        const credentials = assumedRole.Credentials;
-
-        // Use the assumed credentials to create a support case
-        const supportClient = new SupportClient({
-          region: 'us-east-1',
-          credentials: {
-            accessKeyId: credentials.AccessKeyId,
-            secretAccessKey: credentials.SecretAccessKey,
-            sessionToken: credentials.SessionToken
-          }
-        });
-
-        const params = {
-          subject: formData.subject,
-          serviceCode: formData.service,
-          severityCode: formData.severity,
-          categoryCode: formData.category,
-          communicationBody: formData.description,
-          attachmentSet: formData.attachment.map(file => ({
-            fileName: file.name,
-            data: file
-          })),
-          ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
-        };
-
-        const data = await supportClient.createCase(params).promise();
-
-        console.log('Case created:', data);
-        setFormData({
-          workloadAccount: '',
-          issueType: '',
-          service: '',
-          category: '',
-          severity: '',
-          subject: '',
-          description: '',
-          attachment: [],
-          additionalContacts: ''
-        });
-        alert('Case created successfully!');
-      } catch (error) {
-        console.error('Error creating case:', error);
-        alert('Failed to create case. Please try again later.');
-      }
+      
+      const command = new DescribeOrganizationCommand({});
+    const data = await organizationsClient.send(command);
+    const masterAccountId = data?.Organization?.MasterAccountId;
+    if (masterAccountId) {
+      setManagementAccount(masterAccountId);
+      console.log('Management Account ID:', masterAccountId);
     } else {
-      alert('No need to assume role. Workload account is the same as the management account.');
+      console.error('Master Account ID not found in response:', data);
     }
-  };
+  
+      // Assume a role in the management account only if necessary
+      if (formData.workloadAccount !== managementAccount) {
+        const assumeRoleParams = {
+          RoleArn: 'arn:aws:iam::707187469504:role/CrossAccountSupportRole',
+          RoleSessionName: 'CrossAccountSupportRole'
+        };
+        const stsClient = new STSClient({
+          region: 'us-east-1',
+          credentials: client.config.credentials, // Use existing credentials
+        });
+        try {
+          const assumedRole = await stsClient.send(new AssumeRoleCommand(assumeRoleParams));
+          const credentials = assumedRole.Credentials;
+
+          // Use the assumed credentials to create a support case
+          const supportClient = new SupportClient({
+            region: 'us-east-1',
+            credentials: {
+              accessKeyId: credentials.AccessKeyId,
+              secretAccessKey: credentials.SecretAccessKey,
+              sessionToken: credentials.SessionToken
+            }
+          });
+
+          const params = {
+            subject: formData.subject,
+            serviceCode: formData.service,
+            severityCode: formData.severity,
+            categoryCode: formData.category,
+            communicationBody: formData.description,
+            attachmentSet: formData.attachment.map(file => ({
+              fileName: file.name,
+              data: file
+            })),
+            ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
+          };
+
+          const data = await supportClient.createCase(params).promise();
+
+          console.log('Case created:', data);
+          setFormData({
+            workloadAccount: '',
+            issueType: '',
+            service: '',
+            category: '',
+            severity: '',
+            subject: '',
+            description: '',
+            attachment: [],
+            additionalContacts: ''
+          });
+          alert('Case created successfully!');
+        } catch (error) {
+          console.error('Error creating case:', error);
+          alert('Failed to create case. Please try again later.');
+        }
+      } else {
+        alert('No need to assume role. Workload account is the same as the management account.');
+      }
+    } catch (error) {
+      console.error('Error fetching management account:', error);
+      alert('Failed to fetch management account. Please try again later.');
+    }
+};
 
   return (
     <div className="container">
