@@ -43,3 +43,19 @@ button {
 button:hover {
   background-color: #0056b3;
 }
+
+.button-group {
+  margin-top: 20px;
+}
+
+.button-group button {
+  margin-right: 10px;
+}
+
+.error-banner {
+  background-color: #f44336; /* Red color */
+  color: white;
+  padding: 1px;
+  margin-top: 20px;
+  border-radius: 3px;
+}
