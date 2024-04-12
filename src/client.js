@@ -8,5 +8,4 @@ const client = new SupportClient({
     }
   });
 
-
 export default client ;

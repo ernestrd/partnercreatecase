@@ -56,8 +56,13 @@ function CaseCreationForm() {
         };
         const command = new DescribeServicesCommand(params);
         const data = await client.send(command);
-        const serviceNames = data.services.map(service => service.code);
-        setServices(serviceNames);
+        const serviceList = data.services.map(service => ({
+          code: service.code,
+          name: service.name
+        }));
+        // Sort the services alphabetically
+        serviceList.sort((a, b) => a.name.localeCompare(b.name));
+        setServices(serviceList);
       } catch (error) {
         console.error('Error fetching services:', error);
       }
@@ -67,8 +72,11 @@ function CaseCreationForm() {
       try {
         const command = new DescribeSeverityLevelsCommand({});
         const data = await client.send(command);
-        const severityCodes = data.severityLevels.map(severity => severity.code);
-        setSeverities(severityCodes);
+        const severityList = data.severityLevels.map(severity => ({
+          code: severity.code,
+          name: severity.name
+        }));
+        setSeverities(severityList);
       } catch (error) {
         console.error('Error fetching severities:', error);
       }
@@ -86,18 +94,29 @@ function CaseCreationForm() {
     }
   }, [managementAccount, formData.workloadAccount]);
   
-const handleChange = (e) => {
-  const { name, value } = e.target;
-  setFormData({
-    ...formData,
-    [name]: value
-  });
-
-  if (name === 'service') {
-    const selectedServiceCategories = allCategories.filter(category => category.serviceCode === value);
-    setCategories(selectedServiceCategories.map(category => category.categoryName));
-  }
-};
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  
+    if (name === 'service') {
+      const selectedServiceCategories = allCategories.filter(category => category.serviceCode === value);
+      setCategories(selectedServiceCategories);
+    }
+  
+    // Update the category code instead of the name
+    if (name === 'category') {
+      const selectedCategory = allCategories.find(category => category.categoryName === value);
+      if (selectedCategory) {
+        setFormData({
+          ...formData,
+          category: selectedCategory.categoryCode // Update category to category code
+        });
+      }
+    }
+  };
 
   const handleFileChange = (e) => {
     setFormData({
@@ -108,6 +127,7 @@ const handleChange = (e) => {
 
   const handleReview = (e) => {
     e.preventDefault();
+    console.log("Review button clicked");
     setIsReviewing(true);
   };
 
@@ -119,88 +139,123 @@ const handleChange = (e) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    console.log("Submit button clicked");
     try {
+      // Fetch management account ID
       const organizationsClient = new OrganizationsClient({
         region: 'us-east-1',
         credentials: client.config.credentials
       });
-
-    const command = new DescribeOrganizationCommand({});
-    const data = await organizationsClient.send(command);
-    const masterAccountId = data?.Organization?.MasterAccountId;
-    if (masterAccountId) {
-      setManagementAccount(masterAccountId);
-      console.log('Management Account ID:', masterAccountId);
-    } else {
-      console.error('Master Account ID not found in response:', data);
-    }
-  
-    // Check if workload account is the same as the management account
-    // Assume a role in the management account only if necessary
-    if (formData.workloadAccount !== masterAccountId) {
-      const assumeRoleParams = {
-        RoleArn: 'arn:aws:iam::707187469504:role/CrossAccountSupportRole',
-        RoleSessionName: 'CrossAccountSupportRole'
-      };
-      const stsClient = new STSClient({
-        region: 'us-east-1',
-        credentials: client.config.credentials, // Use existing credentials
-      });
-      try {
-        const assumedRole = await stsClient.send(new AssumeRoleCommand(assumeRoleParams));
-        const credentials = assumedRole.Credentials;
-
-        // Use the assumed credentials to create a support case
-        const client = new SupportClient({
-          region: 'us-east-1',
-          credentials: {
-            accessKeyId: credentials.AccessKeyId,
-            secretAccessKey: credentials.SecretAccessKey,
-            sessionToken: credentials.SessionToken
-          }
-        });
-
-        const response = await client.send(
-          new CreateCaseCommand({
-            subject: formData.subject,
-            serviceCode: formData.service,
-            severityCode: formData.severity,
-            categoryCode: formData.category,
-            communicationBody: formData.description,
-            attachmentSet: formData.attachment.map(file => ({
-              fileName: file.name,
-              data: file
-            })),
-            ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
-          })
-        );
-
-        console.log('Case created:', response);
-        setFormData({
-          workloadAccount: '',
-          issueType: '',
-          service: '',
-          category: '',
-          severity: '',
-          subject: '',
-          description: '',
-          attachment: [],
-          additionalContacts: ''
-        });
-        alert('Case created successfully!');
-      } catch (error) {
-        console.error('Error creating case:', error);
-        alert('Failed to create case. Please try again later.');
+      const command = new DescribeOrganizationCommand({});
+      const data = await organizationsClient.send(command);
+      const masterAccountId = data?.Organization?.MasterAccountId;
+      if (masterAccountId) {
+        setManagementAccount(masterAccountId);
+        console.log('Management Account ID:', masterAccountId);
+      } else {
+        console.error('Master Account ID not found in response:', data);
       }
-    } else {
-      alert('No need to assume role. Workload account is the same as the management account.');
+  
+      // Check if workload account is the same as the management account
+      // Assume a role in the management account only if necessary
+      if (formData.workloadAccount !== masterAccountId) {
+        const assumeRoleParams = {
+          RoleArn: 'arn:aws:iam::707187469504:role/CrossAccountSupportRole',
+          RoleSessionName: 'CrossAccountSupportRole'
+        };
+        const stsClient = new STSClient({
+          region: 'us-east-1',
+          credentials: client.config.credentials, // Use existing credentials
+        });
+        try {
+          const assumedRole = await stsClient.send(new AssumeRoleCommand(assumeRoleParams));
+          const credentials = assumedRole.Credentials;
+  
+          // Use the assumed credentials to create a support case
+          const client = new SupportClient({
+            region: 'us-east-1',
+            credentials: {
+              accessKeyId: credentials.AccessKeyId,
+              secretAccessKey: credentials.SecretAccessKey,
+              sessionToken: credentials.SessionToken
+            }
+          });
+  
+          const response = await client.send(
+            new CreateCaseCommand({
+              subject: formData.subject,
+              serviceCode: formData.service,
+              severityCode: formData.severity,
+              categoryCode: formData.category,
+              communicationBody: formData.description,
+              attachmentSet: formData.attachment.map(file => ({
+                fileName: file.name,
+                data: file
+              })),
+              ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
+            })
+          );
+  
+          console.log('Case created:', response);
+          setFormData({
+            workloadAccount: '',
+            issueType: '',
+            service: '',
+            category: '',
+            severity: '',
+            subject: '',
+            description: '',
+            attachment: [],
+            additionalContacts: ''
+          });
+          setIsReviewing(false); // Exit review mode
+          alert('Case created successfully!');
+        } catch (error) {
+          console.error('Error creating case:', error);
+          alert('Failed to create case. Please try again later.');
+        }
+  
+      } else {
+        try {
+          const response = await client.send(
+            new CreateCaseCommand({
+              subject: formData.subject,
+              serviceCode: formData.service,
+              severityCode: formData.severity,
+              categoryCode: formData.category,
+              communicationBody: formData.description,
+              attachmentSet: formData.attachment.map(file => ({
+                fileName: file.name,
+                data: file
+              })),
+              ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
+            })
+          );
+  
+          console.log('Case created:', response);
+          setFormData({
+            workloadAccount: '',
+            issueType: '',
+            service: '',
+            category: '',
+            severity: '',
+            subject: '',
+            description: '',
+            attachment: [],
+            additionalContacts: ''
+          });
+          setIsReviewing(false); // Exit review mode
+          alert('Case created successfully!');
+        } catch (error) {
+          console.error('Error creating case:', error);
+          alert('Failed to create case. Please try again later.');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching management account:', error);
+      alert('Failed to fetch management account. Please try again later.');
     }
-  } catch (error) {
-    console.error('Error fetching management account:', error);
-    alert('Failed to fetch management account. Please try again later.');
-  }
-};
+  };
 
   return (
     <div className="container">
@@ -221,29 +276,29 @@ const handleChange = (e) => {
               </select>
             </div>
             <div className="form-group">
-          <label htmlFor="service">Service:</label>
-          <select id="service" name="service" value={formData.service} onChange={(e) => { handleChange(e); fetchCategories(e.target.value); }} required>
-            <option value="">Select</option>
-            {services.map((service, index) => (
-              <option key={index} value={service}>{service}</option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="category">Category:</label>
-          <select id="category" name="category" value={formData.category} onChange={handleChange} required>
-            <option value="">Select</option>
-            {categories.map((category, index) => (
-              <option key={index} value={category}>{category}</option>
-            ))}
-          </select>
-        </div>
+              <label htmlFor="service">Service:</label>
+              <select id="service" name="service" value={formData.service} onChange={(e) => { handleChange(e); fetchCategories(e.target.value); }} required>
+                <option value="">Select</option>
+                {services.map((service, index) => (
+                  <option key={index} value={service.code}>{service.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="category">Category:</label>
+              <select id="category" name="category" value={formData.category} onChange={handleChange} required>
+                <option value="">Select</option>
+                {categories.map((category, index) => (
+                  <option key={index} value={category.categoryCode}>{category.categoryName}</option>
+                ))}
+              </select>
+            </div>
             <div className="form-group">
               <label htmlFor="severity">Severity:</label>
               <select id="severity" name="severity" value={formData.severity} onChange={handleChange} required>
                 <option value="">Select</option>
                 {severities.map((severity, index) => (
-                  <option key={index} value={severity}>{severity}</option>
+                  <option key={index} value={severity.code}>{severity.name}</option>
                 ))}
               </select>
             </div>
