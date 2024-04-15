@@ -74,7 +74,6 @@ function CaseCreationForm() {
           code: service.code,
           name: service.name
         }));
-        // Sort the services alphabetically
         serviceList.sort((a, b) => a.name.localeCompare(b.name));
         setServices(serviceList);
       } catch (error) {
@@ -113,14 +112,13 @@ function CaseCreationForm() {
       const selectedServiceCategories = allCategories.filter(category => category.serviceCode === value);
       setCategories(selectedServiceCategories);
     }
-  
-    // Update the category code instead of the name
+
     if (name === 'category') {
       const selectedCategory = allCategories.find(category => category.categoryName === value);
       if (selectedCategory) {
         setFormData({
           ...formData,
-          category: selectedCategory.categoryCode // Update category to category code
+          category: selectedCategory.categoryCode
         });
       }
     }
@@ -141,13 +139,13 @@ function CaseCreationForm() {
   const handleCancelReview = (e) => {
     e.preventDefault();
     setIsReviewing(false);
-    setSubmitError(null); // Clear the submit error
+    setSubmitError(null);
   };
 
   const handleSubmit = async () => {
     try {
-      // Attempt to create a case using the workload account credentials
-      const client = await initClient(); // Initialize the client here
+      // Attempt to create a case using the signed in user's credentials
+      const client = await initClient();
       const response = await client.send(
             new CreateCaseCommand({
               subject: formData.subject,
@@ -165,7 +163,6 @@ function CaseCreationForm() {
   
           console.log('Case created:', response);
           setFormData(prevFormData => ({
-            // Reset form fields
             ...prevFormData,
             workloadAccount: '',
             issueType: '',
@@ -177,11 +174,11 @@ function CaseCreationForm() {
             attachment: [],
             additionalContacts: ''
           }));
-          setIsReviewing(false); // Exit review mode
+          setIsReviewing(false); 
           console.log('Case created:', response);
           const caseDetailsResponse = await client.send(
             new DescribeCasesCommand({
-              caseId: response.caseId // Assuming response.caseId contains the ID of the created case
+              caseId: response.caseId
             })
           );
           const displayId = caseDetailsResponse?.displayId;
@@ -197,10 +194,9 @@ function CaseCreationForm() {
 
           console.log('Error details:', error.name);
          
-        
+      //verifying if the error is access denied. If so, attempt to check the management account and assume a role
       if (error.name === 'AccessDeniedException') {
-      // If access is denied, assume a role in the management account and try again
-      const client = await initClient(); // Initialize the client here
+      const client = await initClient();
       const organizationsClient = new OrganizationsClient({
         region: 'us-east-1',
         credentials: client.config.credentials
@@ -220,7 +216,7 @@ function CaseCreationForm() {
         };
         const stsClient = new STSClient({
           region: 'us-east-1',
-          credentials: client.config.credentials, // Use existing credentials
+          credentials: client.config.credentials, 
         });
         try {
           const assumedRole = await stsClient.send(new AssumeRoleCommand(assumeRoleParams));
@@ -253,7 +249,6 @@ function CaseCreationForm() {
   
           console.log('Case created:', response);
           setFormData(prevFormData => ({
-            // Reset form fields
             ...prevFormData,
             workloadAccount: '',
             issueType: '',
@@ -265,7 +260,7 @@ function CaseCreationForm() {
             attachment: [],
             additionalContacts: ''
           }));
-          setIsReviewing(false); // Exit review mode
+          setIsReviewing(false);
           const input = { 
             caseIdList: [
                 response.caseId
@@ -285,8 +280,7 @@ function CaseCreationForm() {
             console.error('Error creating case:', error);
             alert('Failed to create case. Please try again later.');
         }
-    
-    }
+        }
     }
 };
     
