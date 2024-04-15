@@ -175,15 +175,18 @@ function CaseCreationForm() {
             additionalContacts: ''
           }));
           setIsReviewing(false); 
-          console.log('Case created:', response);
+          
+          const input = { 
+            caseIdList: [
+                response.caseId
+            ]
+          }
           const caseDetailsResponse = await client.send(
-            new DescribeCasesCommand({
-              caseId: response.caseId
-            })
+            new DescribeCasesCommand(input)
           );
-          const displayId = caseDetailsResponse?.displayId;
+          const displayId = caseDetailsResponse?.cases[0]?.displayId;
           if (displayId) {
-            alert(`Case created successfully! Case ID: ${response.displayId}`);
+            alert(`Case created successfully! Case ID: ${displayId}`);
           } else {
             console.error('Error fetching case details:', caseDetailsResponse);
           }
