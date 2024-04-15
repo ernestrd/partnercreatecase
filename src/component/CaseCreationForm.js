@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import '../App.css';
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { DescribeSeverityLevelsCommand, DescribeServicesCommand , CreateCaseCommand } from "@aws-sdk/client-support";
+import { DescribeSeverityLevelsCommand, DescribeServicesCommand , CreateCaseCommand , DescribeCasesCommand  } from "@aws-sdk/client-support";
 import { OrganizationsClient , DescribeOrganizationCommand } from "@aws-sdk/client-organizations";
 import { getClient } from '../client.js';
 import ErrorBanner from './ErrorBanner.js';
@@ -102,13 +102,6 @@ function CaseCreationForm() {
     fetchSeverities();
   }, []);
   
-  useEffect(() => {
-    // Automatically update the workloadAccount to the management account if it's not already set
-    if (managementAccount && !formData.workloadAccount) {
-      setFormData({ ...formData, workloadAccount: managementAccount });
-    }
-  }, [managementAccount, formData.workloadAccount]);
-  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({
@@ -142,7 +135,6 @@ function CaseCreationForm() {
 
   const handleReview = (e) => {
     e.preventDefault();
-    console.log("Review button clicked");
     setIsReviewing(true);
   };
 
@@ -152,11 +144,62 @@ function CaseCreationForm() {
     setSubmitError(null); // Clear the submit error
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    console.log("Submit button clicked");
+  const handleSubmit = async () => {
     try {
-      // Fetch management account ID
+      // Attempt to create a case using the workload account credentials
+      const client = await initClient(); // Initialize the client here
+      const response = await client.send(
+            new CreateCaseCommand({
+              subject: formData.subject,
+              serviceCode: formData.service,
+              severityCode: formData.severity,
+              categoryCode: formData.category,
+              communicationBody: formData.description,
+              attachmentSet: formData.attachment.map(file => ({
+                fileName: file.name,
+                data: file
+              })),
+              ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
+            })
+          );
+  
+          console.log('Case created:', response);
+          setFormData(prevFormData => ({
+            // Reset form fields
+            ...prevFormData,
+            workloadAccount: '',
+            issueType: '',
+            service: '',
+            category: '',
+            severity: '',
+            subject: '',
+            description: '',
+            attachment: [],
+            additionalContacts: ''
+          }));
+          setIsReviewing(false); // Exit review mode
+          console.log('Case created:', response);
+          const caseDetailsResponse = await client.send(
+            new DescribeCasesCommand({
+              caseId: response.caseId // Assuming response.caseId contains the ID of the created case
+            })
+          );
+          const displayId = caseDetailsResponse?.displayId;
+          if (displayId) {
+            alert(`Case created successfully! Case ID: ${response.displayId}`);
+          } else {
+            console.error('Error fetching case details:', caseDetailsResponse);
+          }
+          setSubmitError(null);
+        } catch (error) {
+          console.error('Error creating case:', error);
+          alert('Access denied when creating case. Assuming role in management account...');
+
+          console.log('Error details:', error.name);
+         
+        
+      if (error.name === 'AccessDeniedException') {
+      // If access is denied, assume a role in the management account and try again
       const client = await initClient(); // Initialize the client here
       const organizationsClient = new OrganizationsClient({
         region: 'us-east-1',
@@ -171,10 +214,6 @@ function CaseCreationForm() {
       } else {
         console.error('Master Account ID not found in response:', data);
       }
-  
-      // Check if workload account is the same as the management account
-      // Assume a role in the management account only if necessary
-      if (formData.workloadAccount !== masterAccountId) {
         const assumeRoleParams = {
           RoleArn: 'arn:aws:iam::707187469504:role/CrossAccountSupportRole',
           RoleSessionName: 'CrossAccountSupportRole'
@@ -213,7 +252,9 @@ function CaseCreationForm() {
           );
   
           console.log('Case created:', response);
-          setFormData({
+          setFormData(prevFormData => ({
+            // Reset form fields
+            ...prevFormData,
             workloadAccount: '',
             issueType: '',
             service: '',
@@ -223,56 +264,32 @@ function CaseCreationForm() {
             description: '',
             attachment: [],
             additionalContacts: ''
-          });
+          }));
           setIsReviewing(false); // Exit review mode
-          alert('Case created successfully!');
-        } catch (error) {
-          console.error('Error creating case:', error);
-          alert('Failed to create case. Please try again later.');
-        }
-  
-      } else {
-        try {
-          const response = await client.send(
-            new CreateCaseCommand({
-              subject: formData.subject,
-              serviceCode: formData.service,
-              severityCode: formData.severity,
-              categoryCode: formData.category,
-              communicationBody: formData.description,
-              attachmentSet: formData.attachment.map(file => ({
-                fileName: file.name,
-                data: file
-              })),
-              ccEmailAddresses: formData.additionalContacts.split(',').map(email => email.trim())
-            })
+          const input = { 
+            caseIdList: [
+                response.caseId
+            ]
+          }
+          const caseDetailsResponse = await client.send(
+            new DescribeCasesCommand(input)
           );
-  
-          console.log('Case created:', response);
-          setFormData({
-            workloadAccount: '',
-            issueType: '',
-            service: '',
-            category: '',
-            severity: '',
-            subject: '',
-            description: '',
-            attachment: [],
-            additionalContacts: ''
-          });
-          setIsReviewing(false); // Exit review mode
-          alert('Case created successfully!');
-        } catch (error) {
-          console.error('Error creating case:', error);
-          alert('Failed to create case. Please try again later.');
+          const displayId = caseDetailsResponse?.cases[0]?.displayId;
+          if (displayId) {
+            alert(`Case created successfully! Case ID: ${displayId}`);
+          } else {
+            console.error('Error fetching case details:', caseDetailsResponse);
+          }
         }
-      }
-    } catch (error) {
-      console.error('Error fetching management account:', error);
-      alert('Failed to fetch management account. Please try again later.');
+        catch (error) {
+            console.error('Error creating case:', error);
+            alert('Failed to create case. Please try again later.');
+        }
+    
     }
-  };
-  
+    }
+};
+    
   return (
     <div className="container">
       <div className="sign-out-container">
